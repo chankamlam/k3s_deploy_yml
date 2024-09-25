@@ -1,0 +1,94 @@
+apiVersion: v1
+kind: Namespace
+metadata:
+  name: mysql-ns
+---
+apiVersion: v1
+kind: PersistentVolumeClaim
+metadata:
+  name: mysql-pvc
+  namespace: mysql-ns
+spec:
+  accessModes:
+    - ReadWriteMany
+  storageClassName: nfs-client
+  resources:
+    requests:
+      storage: 10Gi
+---
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: mysql-deployment
+  namespace: mysql-ns
+spec:
+  replicas: 1
+  selector:
+    matchLabels:
+      app: mysql-app
+  template:
+    metadata:
+      labels:
+        app: mysql-app
+    spec:
+      initContainers:
+        - name: init-chown
+          image: busybox
+          command: ["sh", "-c", "chown -R 999:999 /var/lib/mysql"]
+          volumeMounts:
+            - name: mysql-vol-mysql-pvc
+              mountPath: /var/lib/mysql
+      containers:
+        - name: mysql
+          image: mysql:latest
+          ports:
+            - containerPort: 3306
+          env:
+            - name: MYSQL_ROOT_PASSWORD
+              value: "Ken5201314"
+            - name: MYSQL_DATABASE
+              value: "dev"
+        # - name: MYSQL_USER
+        #   value: "your_user"
+        # - name: MYSQL_PASSWORD
+        #   value: "your_password"
+          volumeMounts:
+            - name: mysql-vol-mysql-pvc
+              mountPath: /var/lib/mysql
+      volumes:
+        - name: mysql-vol-mysql-pvc
+          persistentVolumeClaim:
+            claimName: mysql-pvc
+---
+apiVersion: v1
+kind: Service
+metadata:
+  name: mysql-service
+  namespace: mysql-ns
+spec:
+  selector:
+    app: mysql-app
+  ports:
+    - protocol: TCP
+      port: 3306
+      targetPort: 3306
+---
+# apiVersion: networking.k8s.io/v1
+# kind: Ingress
+# metadata:
+#   name: mysql-ingress
+#   # annotations:
+#     # traefik.ingress.kubernetes.io/router.entrypoints: web
+#     # traefik.ingress.kubernetes.io/router.middlewares: default/strip-prefix
+# spec:
+#   rules:
+#   - host: mysql.local
+#     http:
+#       paths:
+#       - path: /
+#         pathType: Prefix
+#         backend:
+#           service:
+#             name: mysql-service
+#             port:
+#               number: 3306
